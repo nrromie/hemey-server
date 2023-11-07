@@ -33,6 +33,10 @@ async function run() {
         const bookingsCollection = client.db('homeyDB').collection('bookings')
 
 
+        app.get('/favicon.ico', (req, res) => {
+            res.status(204).end();
+        });
+
         app.post('/adduser', async (req, res) => {
             try {
                 const newUser = req.body;
@@ -77,10 +81,25 @@ async function run() {
 
         app.get('/services', async (req, res) => {
             try {
-                const cursor = await servicesCollection.find().toArray();
+                const { query } = req.query;
+                let cursor;
+                if (query) {
+                    cursor = await servicesCollection.find({ serviceName: { $regex: new RegExp(query, 'i') } }).toArray();
+                } else {
+                    cursor = await servicesCollection.find().toArray();
+                }
                 res.send(cursor);
             } catch (error) {
-                res.send({ error: 'Internal Server Error' });
+                res.status(500).send({ error: 'Internal Server Error' });
+            }
+        });
+
+        app.get('/featuredservices', async (req, res) => {
+            try {
+                const featuredServices = await servicesCollection.find().limit(3).toArray();
+                res.send(featuredServices);
+            } catch (error) {
+                res.status(500).send({ error: 'Internal Server Error' });
             }
         });
 
@@ -99,12 +118,17 @@ async function run() {
             const id = new ObjectId(req.params.id);
             try {
                 const service = await servicesCollection.findOne({ _id: id });
-                if (service) {
-                    res.json(service);
-                } else {
-                    res.status(404).json({ error: 'Service not found' });
+                if (!service) {
+                    return res.status(404).json({ error: 'Service not found' });
                 }
+                const userEmail = service.email;
+                const provider = await usersCollection.findOne({ email: userEmail });
+                if (!provider) {
+                    return res.status(404).json({ error: 'User not found' });
+                }
+                res.json({ service, provider });
             } catch (error) {
+                console.error('Error retrieving service and user data:', error);
                 res.status(500).json({ error: 'Internal Server Error' });
             }
         });
@@ -113,9 +137,22 @@ async function run() {
             const newBooking = req.body;
             try {
                 const result = await bookingsCollection.insertOne(newBooking);
-                res.send(result);
-            } catch {
-                res.send({ error: 'An error occured' })
+                res.status(201).json({ message: 'Booking confirmed successfully' });
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ error: 'An error occurred while processing the booking' });
+            }
+        });
+
+        app.get('/myschedules/:email', async (req, res) => {
+            const email = req.params.email;
+            try {
+                const bookings = await bookingsCollection.find({ userEmail: email }).toArray();
+                const myWork = await servicesCollection.find({ email: email }).toArray();
+                res.json({ bookings, myWork });
+            } catch (error) {
+                console.error('Error retrieving bookings and services:', error);
+                res.status(500).json({ error: 'Internal Server Error' });
             }
         });
 
