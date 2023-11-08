@@ -32,7 +32,6 @@ async function run() {
         const servicesCollection = client.db('homeyDB').collection('services')
         const bookingsCollection = client.db('homeyDB').collection('bookings')
 
-
         app.get('/favicon.ico', (req, res) => {
             res.status(204).end();
         });
@@ -54,7 +53,6 @@ async function run() {
         app.get('/users/:email', async (req, res) => {
             try {
                 const userEmail = req.params.email;
-                console.log(userEmail)
                 const user = await usersCollection.findOne({ email: userEmail });
                 console.log(user)
 
@@ -78,6 +76,28 @@ async function run() {
                 res.send({ error: 'An error occured' })
             }
         });
+
+        app.patch('/updateservice/:id', async (req, res) => {
+            const serviceId = req.params.id;
+            const updatedServiceData = req.body;
+
+            try {
+                const result = await servicesCollection.updateOne(
+                    { _id: new ObjectId(serviceId) },
+                    { $set: updatedServiceData }
+                );
+
+                if (result.matchedCount > 0) {
+                    res.send({ updatedCount: result.modifiedCount });
+                } else {
+                    res.status(404).send({ error: 'Service not found' });
+                }
+            } catch (error) {
+                console.error('Error updating service:', error);
+                res.status(500).send({ error: 'An error occurred' });
+            }
+        });
+
 
         app.get('/services', async (req, res) => {
             try {
@@ -144,11 +164,34 @@ async function run() {
             }
         });
 
+        app.patch('/updateStatus/:id', async (req, res) => {
+            const bookingId = req.params.id;
+            const { newStatus } = req.body;
+
+            try {
+                const result = await bookingsCollection.updateOne(
+                    { _id: new ObjectId(bookingId) },
+                    { $set: { status: newStatus } }
+                );
+
+                if (result.matchedCount > 0) {
+                    res.json({ message: 'Status updated successfully' });
+                } else {
+                    res.status(404).json({ error: 'Booking not found' });
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+                res.status(500).json({ error: 'Internal Server Error' });
+            }
+        });
+
         app.get('/myschedules/:email', async (req, res) => {
             const email = req.params.email;
             try {
                 const bookings = await bookingsCollection.find({ userEmail: email }).toArray();
-                const myWork = await servicesCollection.find({ email: email }).toArray();
+                const myWork = await bookingsCollection.find({
+                    providerEmail: email
+                }).toArray();
                 res.json({ bookings, myWork });
             } catch (error) {
                 console.error('Error retrieving bookings and services:', error);
@@ -156,6 +199,22 @@ async function run() {
             }
         });
 
+        //Delete service
+        app.delete('/deleteservice/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const deletedService = await servicesCollection.deleteOne({ _id: new ObjectId(id) });
+
+                if (deletedService.deletedCount === 1) {
+                    res.send({ message: 'Service deleted successfully' });
+                } else {
+                    res.status(404).send({ message: 'Service not found' });
+                }
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: 'Internal Server Error' });
+            }
+        });
 
 
         // Send a ping to confirm a successful connection
