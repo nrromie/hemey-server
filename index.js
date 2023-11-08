@@ -54,7 +54,6 @@ async function run() {
             try {
                 const userEmail = req.params.email;
                 const user = await usersCollection.findOne({ email: userEmail });
-                console.log(user)
 
                 if (!user) {
                     return res.status(404).json({ error: 'User not found' });
@@ -102,21 +101,49 @@ async function run() {
         app.get('/services', async (req, res) => {
             try {
                 const { query } = req.query;
-                let cursor;
+
+                let serviceCursor;
+
                 if (query) {
-                    cursor = await servicesCollection.find({ serviceName: { $regex: new RegExp(query, 'i') } }).toArray();
+                    serviceCursor = await servicesCollection.find({
+                        serviceName: { $regex: new RegExp(query, 'i') },
+                    }).toArray();
                 } else {
-                    cursor = await servicesCollection.find().toArray();
+                    serviceCursor = await servicesCollection.find().toArray();
                 }
-                res.send(cursor);
+
+                const userEmails = serviceCursor.map(service => service.email);
+
+                const userCursor = await usersCollection.find(
+                    { email: { $in: userEmails } },
+                    { projection: { email: 1, photoURL: 1, displayName: 1 } }
+                ).toArray();
+
+                const combinedData = serviceCursor.map(service => {
+                    const userData = userCursor.find(user => user.email === service.email);
+                    return {
+                        _id: service._id,
+                        email: service.email,
+                        photo: service.photo,
+                        serviceName: service.serviceName,
+                        serviceArea: service.serviceArea,
+                        price: service.price,
+                        description: service.description,
+                        photoURL: userData ? userData.photoURL : null,
+                        displayName: userData ? userData.displayName : null,
+                    };
+                });
+
+                res.send(combinedData);
             } catch (error) {
                 res.status(500).send({ error: 'Internal Server Error' });
             }
         });
 
+
         app.get('/featuredservices', async (req, res) => {
             try {
-                const featuredServices = await servicesCollection.find().limit(3).toArray();
+                const featuredServices = await servicesCollection.find().limit(4).toArray();
                 res.send(featuredServices);
             } catch (error) {
                 res.status(500).send({ error: 'Internal Server Error' });
